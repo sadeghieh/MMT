@@ -36,6 +36,7 @@ class ModelFileNotFoundException(BaseException):
 
 
 class NMTEngine:
+    MLTSFFX = 'mltsffx_'	
     class Metadata:
         __custom_values = {'True': True, 'False': False, 'None': None}
 
@@ -174,6 +175,9 @@ class NMTEngine:
         self.processor = processor
         self.metadata = metadata if metadata is not None else NMTEngine.Metadata()
 
+	self._multilingual = False # flag according to type of engine: standard/multilingual
+	self._src_lang = None
+        self._trg_lang = None
         self._translator = None  # lazy load
         self._tuner = None  # lazy load
 
@@ -200,7 +204,7 @@ class NMTEngine:
     def count_parameters(self):
         return sum([p.nelement() for p in self.model.parameters()])
 
-    def tune(self, suggestions, epochs=None, learning_rate=None):
+    def tune(self, suggestions, target_lang=None, epochs=None, learning_rate=None):
         # Set tuning parameters
         if epochs is None or learning_rate is None:
             _epochs, _learning_rate = self._estimate_tuning_parameters(suggestions)
@@ -227,6 +231,9 @@ class NMTEngine:
 
             for suggestion in suggestions:
                 source = self.processor.encode_line(suggestion.source, is_source=True)
+                if self._multilingual == True:
+                    source.append(MTLSFFX+target_lang)
+
                 source = self.src_dict.convertToIdxTensor(source, Constants.UNK_WORD)
 
                 target = self.processor.encode_line(suggestion.target, is_source=False)
@@ -268,7 +275,7 @@ class NMTEngine:
 
         return tuning_epochs, tuning_learning_rate
 
-    def translate(self, text, beam_size=5, max_sent_length=160, replace_unk=False, n_best=1):
+    def translate(self, text, target_lang=None, beam_size=5, max_sent_length=160, replace_unk=False, n_best=1):
         self._ensure_model_loaded()
 
         self.model.eval()
@@ -282,13 +289,18 @@ class NMTEngine:
         self._translator.opt.n_best = n_best
 
         src_bpe_tokens = self.processor.encode_line(text, is_source=True)
-        pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
+	if self._multilingual == True:
+	    src_bpe_tokens.append(MTLSFFX+target_lang)
+	    sffx_position=len(src_bpe_tokens)
+
+	pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
 
         translations = []
         for trg_bpe_tokens, bpe_alignment in zip(pred_batch[0], align_batch[0]):
-            src_indexes = self.processor.get_words_indexes(src_bpe_tokens)
+	    src_indexes = self.processor.get_words_indexes(src_bpe_tokens)
             trg_indexes = self.processor.get_words_indexes(trg_bpe_tokens)
-
+	    if self._multilingual == True:
+	        bpe_alignment = [p for p in bpe_alignment if p[0] != sffx_position]
             translation = Translation(text=self.processor.decode_tokens(trg_bpe_tokens),
                                       alignment=self._make_alignment(src_indexes, trg_indexes, bpe_alignment))
 

@@ -71,11 +71,14 @@ class TranslationMemory:
 
 
 class NMTPreprocessor:
+    MLTSFFX = 'mltsffx_'
     def __init__(self, source_lang, target_lang, bpe_symbols, max_vocab_size):
         self._source_lang = source_lang
         self._target_lang = target_lang
         self._bpe_symbols = bpe_symbols
         self._max_vocab_size = max_vocab_size
+
+        self._multilingual = False # flag according to type of engine: standard/multilingual
 
         self._logger = logging.getLogger('mmt.neural.NMTPreprocessor')
         self._ram_limit_mb = 1024
@@ -112,6 +115,9 @@ class NMTPreprocessor:
 
                 for word in bpe_encoder.get_source_terms():
                     src_vocab.add(word)
+	        if self._multilingual == True:
+ 		    src_vocab.add(MTLSFFX+self._target_lang)
+
                 for word in bpe_encoder.get_target_terms():
                     trg_vocab.add(word)
 
@@ -140,6 +146,9 @@ class NMTPreprocessor:
                     trg_words = bpe_encoder.encode_line(target, is_source=False)
 
                     if len(src_words) > 0 and len(trg_words) > 0:
+                        if self._multilingual == True:
+                            src_words.append(MTLSFFX+self._target_lang)
+  
                         source = src_vocab.convertToIdxList(src_words,
                                                             onmt.Constants.UNK_WORD)
                         target = trg_vocab.convertToIdxList(trg_words,
