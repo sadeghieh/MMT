@@ -17,6 +17,13 @@ class Tokenizer:
         self._print_placeholders = print_placeholders
         self._java_mainclass = 'eu.modernmt.cli.PreprocessorMain'
 
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+           for trg in self._target_lang.split(","):
+              if src!=trg:
+                 self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
+
     def process_corpora(self, corpora, output_folder):
         fileutils.makedirs(output_folder, exist_ok=True)
 
@@ -56,6 +63,13 @@ class TMCleaner:
         self._source_lang = source_lang
         self._target_lang = target_lang
 
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+           for trg in self._target_lang.split(","):
+              if src!=trg:
+                 self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
+    
         self._java_mainclass = 'eu.modernmt.cli.CleaningPipelineMain'
 
     def clean(self, corpora, output_path, log=None):
@@ -67,18 +81,18 @@ class TMCleaner:
         mem_mb = mem_bytes / (1024. ** 2)  # e.g. 3.74
 
         extended_heap_mb = int(mem_mb * 90 / 100)
+        input_paths = set([corpus.get_folder() for corpus in corpora])
 
-        args = ['-s', self._source_lang, '-t', self._target_lang,
+	for pair in self._lang_pairs:
+           args = ['-s', pair[0], '-t', pair[1],
                 '--filters', 'normalize', 'punctuation', 'odd_sentences', 'drafts', 'sentence_length',
                 '--output', output_path, '--input']
 
-        input_paths = set([corpus.get_folder() for corpus in corpora])
+           for root in input_paths:
+              args.append(root)
 
-        for root in input_paths:
-            args.append(root)
-
-        command = mmt_javamain(self._java_mainclass, args=args, max_heap_mb=extended_heap_mb)
-        shell.execute(command, stdout=log, stderr=log)
+           command = mmt_javamain(self._java_mainclass, args=args, max_heap_mb=extended_heap_mb)
+           shell.execute(command, stdout=log, stderr=log)
 
         return BilingualCorpus.list(output_path)
 
@@ -91,6 +105,13 @@ class TrainingPreprocessor:
         self._source_lang = source_lang
         self._target_lang = target_lang
 
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+           for trg in self._target_lang.split(","):
+              if src!=trg:
+                 self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
+
         self._process_mainclass = 'eu.modernmt.cli.TrainingPipelineMain'
         self._reduce_mainclass = 'eu.modernmt.cli.ReducingCorporaMain'
 
@@ -98,40 +119,48 @@ class TrainingPreprocessor:
         if log is None:
             log = shell.DEVNULL
 
-        args = ['-s', self._source_lang, '-t', self._target_lang, '--output', output_path]
-        if vb_path:
+        input_paths = set([corpus.get_folder() for corpus in corpora])
+        billist=[]
+	monlist=[]
+        for pair in self._lang_pairs:
+          args = ['-s', pair[0], '-t', pair[1], '--output', output_path]
+          if vb_path:
             args.append('-v')
             args.append(vb_path)
 
-        args.append('--input')
-        input_paths = set([corpus.get_folder() for corpus in corpora])
+          args.append('--input')
 
-        for root in input_paths:
+          for root in input_paths:
             args.append(root)
 
-        if data_path is not None:
+          if data_path is not None:
             args.append('--dev')
             args.append(os.path.join(data_path, TrainingPreprocessor.DEV_FOLDER_NAME))
             args.append('--test')
             args.append(os.path.join(data_path, TrainingPreprocessor.TEST_FOLDER_NAME))
 
-        command = mmt_javamain(self._process_mainclass, args)
-        shell.execute(command, stdout=log, stderr=log)
+          command = mmt_javamain(self._process_mainclass, args)
+          shell.execute(command, stdout=log, stderr=log)
 
-        return BilingualCorpus.splitlist(self._source_lang, self._target_lang, roots=output_path)
+	  tmp_billist,tmp_monlist=BilingualCorpus.splitlist(pair[0], pair[1], roots=output_path)
+          billist+=tmp_billist
+	  monlist+=tmp_monlist
+
+        return billist,monlist
 
     def reduce(self, corpora, output_path, word_limit, log=None):
         if log is None:
             log = shell.DEVNULL
 
-        args = ['-s', self._source_lang, '-t', self._target_lang, '--words', str(word_limit),
+	for pair in self._lang_pairs:
+          args = ['-s', pair[0], '-t', pair[1], '--words', str(word_limit),
                 '--output', output_path, '--input']
 
-        for root in set([corpus.get_folder() for corpus in corpora]):
+          for root in set([corpus.get_folder() for corpus in corpora]):
             args.append(root)
 
-        command = mmt_javamain(self._reduce_mainclass, args=args)
-        shell.execute(command, stdout=log, stderr=log)
+          command = mmt_javamain(self._reduce_mainclass, args=args)
+          shell.execute(command, stdout=log, stderr=log)
 
         return BilingualCorpus.list(output_path)
 

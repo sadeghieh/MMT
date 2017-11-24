@@ -48,6 +48,13 @@ class TranslationMemory:
         self._source_lang = source_lang
         self._target_lang = target_lang
 
+	self._lang_pairs = []
+	for src in self._source_lang.split(","):
+	   for trg in self._target_lang.split(","):
+	      if src!=trg:
+		 self._lang_pairs.append((src,trg))
+	self._lang_pairs=list(set(self._lang_pairs))
+
         self._java_mainclass = 'eu.modernmt.cli.TranslationMemoryMain'
 
     def create(self, corpora, log=None):
@@ -62,12 +69,13 @@ class TranslationMemory:
         shutil.rmtree(self._model, ignore_errors=True)
         fileutils.makedirs(self._model, exist_ok=True)
 
-        args = ['-s', self._source_lang, '-t', self._target_lang, '-m', self._model, '-c']
-        for source_path in source_paths:
-            args.append(source_path)
+	for pair in self._lang_pairs:
+            args = ['-s', pair[0], '-t', pair[1], '-m', self._model, '-c']
+            for source_path in source_paths:
+                args.append(source_path)
 
-        command = mmt_javamain(self._java_mainclass, args)
-        shell.execute(command, stdout=log, stderr=log)
+            command = mmt_javamain(self._java_mainclass, args)
+            shell.execute(command, stdout=log, stderr=log)
 
 
 class NMTPreprocessor:
@@ -83,6 +91,14 @@ class NMTPreprocessor:
         self._logger = logging.getLogger('mmt.neural.NMTPreprocessor')
         self._ram_limit_mb = 1024
 
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+           for trg in self._target_lang.split(","):
+              if src!=trg:
+                 self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
+        
+  
     def process(self, corpora, valid_corpora, output_path, checkpoint=None):
         bpe_output_path = os.path.join(output_path, 'vocab.bpe')
         voc_output_path = os.path.join(output_path, 'vocab.pt')
@@ -104,7 +120,10 @@ class NMTPreprocessor:
             with _log_timed_action(self._logger, 'Creating BPE model'):
                 vb_builder = SubwordTextProcessor.Builder(symbols=self._bpe_symbols,
                                                           max_vocabulary_size=self._max_vocab_size)
-                bpe_encoder = vb_builder.build([c.reader([self._source_lang, self._target_lang]) for c in corpora])
+	        tmp=[]
+		for pair in self._lang_pairs:
+		    tmp=tmp+[c.reader([pair[0], pair[1]]) for c in corpora]
+                bpe_encoder = vb_builder.build(tmp)
                 bpe_encoder.save_to_file(bpe_output_path)
 
             with _log_timed_action(self._logger, 'Creating vocabularies'):
@@ -116,7 +135,8 @@ class NMTPreprocessor:
                 for word in bpe_encoder.get_source_terms():
                     src_vocab.add(word)
 	        if self._multilingual == True:
- 		    src_vocab.add(MTLSFFX+self._target_lang)
+		    for pair in self._lang_pairs:
+ 		        src_vocab.add(MTLSFFX+pair[1])  # TODO CHECK: what happens if the same word is added twice?
 
                 for word in bpe_encoder.get_target_terms():
                     trg_vocab.add(word)
@@ -140,14 +160,16 @@ class NMTPreprocessor:
         builder = MMapDataset.Builder(output_path)
 
         for corpus in corpora:
-            with corpus.reader([self._source_lang, self._target_lang]) as reader:
+	    for pair in self._lang_pairs:
+              if pair[0] in corpus.langs and pair[1] in corpus.langs:
+               with corpus.reader([pair[0], pair[1]]) as reader:
                 for source, target in reader:
                     src_words = bpe_encoder.encode_line(source, is_source=True)
                     trg_words = bpe_encoder.encode_line(target, is_source=False)
 
                     if len(src_words) > 0 and len(trg_words) > 0:
                         if self._multilingual == True:
-                            src_words.append(MTLSFFX+self._target_lang)
+                            src_words.append(MTLSFFX+pair[1])
   
                         source = src_vocab.convertToIdxList(src_words,
                                                             onmt.Constants.UNK_WORD)
@@ -178,6 +200,14 @@ class NMTDecoder:
         self._source_lang = source_lang
         self._target_lang = target_lang
 
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+             for trg in self._target_lang.split(","):
+                if src!=trg:
+                  self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
+        
+  
     def train(self, train_path, working_dir, training_opts, checkpoint_path=None, metadata_path=None):
         self._logger.info('Training started for data "%s"' % train_path)
 

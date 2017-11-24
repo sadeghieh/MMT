@@ -27,10 +27,14 @@ class NMTDecoder:
 
                 direction, model_name = map(str.strip, line.split("="))
                 direction = direction[6:]
-
+                tmppath=[]
                 with log_timed_action(self._logger, 'Loading "%s" model from checkpoint' % direction):
                     model_file = os.path.join(model_path, model_name)
-                    self._engines[direction] = NMTEngine.load_from_checkpoint(model_file)
+		    if model_name in tmppath:
+		       self._engines[direction] = self._engines[self._engines.index(model_name)]
+		       self._engines[direction].multilingual = True
+		    else:
+                       self._engines[direction] = NMTEngine.load_from_checkpoint(model_file)
 
         # Public-editable options
         self.beam_size = 5

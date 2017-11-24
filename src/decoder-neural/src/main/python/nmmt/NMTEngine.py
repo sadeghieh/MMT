@@ -176,8 +176,6 @@ class NMTEngine:
         self.metadata = metadata if metadata is not None else NMTEngine.Metadata()
 
 	self._multilingual = False # flag according to type of engine: standard/multilingual
-	self._src_lang = None
-        self._trg_lang = None
         self._translator = None  # lazy load
         self._tuner = None  # lazy load
 
@@ -343,3 +341,12 @@ class NMTEngine:
         generator_state_dict = generator.state_dict()
 
         return copy.deepcopy(model_state_dict), copy.deepcopy(generator_state_dict)
+
+    @property
+    def multilingual(self):
+	return self._multilingual
+
+    @multilingual.setter
+    def multilingual(self,value):
+	self._multilingual=value
+

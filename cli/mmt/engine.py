@@ -419,9 +419,22 @@ class EngineBuilder:
         source_lang = self._engine.source_lang
         target_lang = self._engine.target_lang
 
+        lang_pairs = []
+        for src in source_lang.split(","):
+           for trg in target_lang.split(","):
+              if src!=trg:
+                 lang_pairs.append((src,trg))
+        lang_pairs=list(set(lang_pairs))
+
+
         # separate bilingual and monolingual corpora in separate lists, reading them from roots
-        bilingual_corpora, monolingual_corpora = BilingualCorpus.splitlist(source_lang, target_lang,
-                                                                           roots=self._roots)
+	bilingual_corpora, monolingual_corpora=[],[]
+
+	for pair in lang_pairs:
+            tmp_bilingual_corpora, tmp_monolingual_corpora = BilingualCorpus.splitlist(pair[0], pair[1],
+                                                                                       roots=self._roots)
+	    bilingual_corpora=bilingual_corpora+tmp_bilingual_corpora 
+	    monolingual_corpora=monolingual_corpora+tmp_monolingual_corpora
 
         # if no bilingual corpora are found, it is not possible to train the translation system
         if len(bilingual_corpora) == 0:
