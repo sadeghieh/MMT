@@ -35,7 +35,7 @@ class ModelFileNotFoundException(BaseException):
         self.message = "Model file not found: %s" % path
 
 
-class NMTEngine:
+class NMTEngine(object):
     MLTSFFX = 'mltsffx_'	
     class Metadata:
         __custom_values = {'True': True, 'False': False, 'None': None}
@@ -175,7 +175,7 @@ class NMTEngine:
         self.processor = processor
         self.metadata = metadata if metadata is not None else NMTEngine.Metadata()
 
-	self._multilingual = False # flag according to type of engine: standard/multilingual
+	self._multilingual = None # flag according to type of engine: standard/multilingual
         self._translator = None  # lazy load
         self._tuner = None  # lazy load
 
@@ -230,7 +230,7 @@ class NMTEngine:
             for suggestion in suggestions:
                 source = self.processor.encode_line(suggestion.source, is_source=True)
                 if self._multilingual == True:
-                    source.append(MTLSFFX+target_lang)
+                    source.append(NMTEngine.MLTSFFX+target_lang)
 
                 source = self.src_dict.convertToIdxTensor(source, Constants.UNK_WORD)
 
@@ -274,6 +274,7 @@ class NMTEngine:
         return tuning_epochs, tuning_learning_rate
 
     def translate(self, text, target_lang=None, beam_size=5, max_sent_length=160, replace_unk=False, n_best=1):
+
         self._ensure_model_loaded()
 
         self.model.eval()
@@ -288,8 +289,8 @@ class NMTEngine:
 
         src_bpe_tokens = self.processor.encode_line(text, is_source=True)
 	if self._multilingual == True:
-	    src_bpe_tokens.append(MTLSFFX+target_lang)
-	    sffx_position=len(src_bpe_tokens)
+	    src_bpe_tokens.append(NMTEngine.MLTSFFX+target_lang)
+	    sffx_position=len(src_bpe_tokens)-1
 
 	pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
 

@@ -383,7 +383,7 @@ class EngineBuilder:
     def _build_schedule(self):
         return [self._clean_tms] + \
                ([self._reduce_train] if self._max_training_words > 0 else []) + \
-               [self._create_db, self._preprocess, self._train_context, self._train_aligner, self._write_config]
+               [self._create_db, self._preprocess, self._train_context, self._write_config]
 
     def _get_tempdir(self, name, delete_if_exists=False):
         path = os.path.join(self._temp_dir, name)

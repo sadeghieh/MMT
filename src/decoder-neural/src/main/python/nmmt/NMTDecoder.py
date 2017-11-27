@@ -21,21 +21,22 @@ class NMTDecoder:
         # create and put in its map a TextProcessor and a NMTEngine for each line in model.conf
         with open(os.path.join(model_path, 'model.conf'), "r") as model_map_file:
             model_map_lines = model_map_file.readlines()
+            tmppath={}
             for line in model_map_lines:
                 if not line.startswith('model.'):
                     continue
 
                 direction, model_name = map(str.strip, line.split("="))
                 direction = direction[6:]
-                tmppath=[]
                 with log_timed_action(self._logger, 'Loading "%s" model from checkpoint' % direction):
                     model_file = os.path.join(model_path, model_name)
 		    if model_name in tmppath:
-		       self._engines[direction] = self._engines[self._engines.index(model_name)]
+		       self._engines[direction] = self._engines[tmppath[model_name]]
 		       self._engines[direction].multilingual = True
 		    else:
                        self._engines[direction] = NMTEngine.load_from_checkpoint(model_file)
-
+                       tmppath[model_name]=direction
+               
         # Public-editable options
         self.beam_size = 5
         self.max_sent_length = 160
@@ -55,11 +56,11 @@ class NMTDecoder:
 
         # (1) Tune engine if suggestions provided
         if suggestions is not None and len(suggestions) > 0:
-            engine.tune(suggestions, epochs=tuning_epochs, learning_rate=tuning_learning_rate)
+            engine.tune(suggestions, epochs=tuning_epochs, learning_rate=tuning_learning_rate, target_lang=target_lang)
             reset_model = True
 
         # (2) Translate and compute word alignment
-        result = engine.translate(text, n_best=n_best, beam_size=self.beam_size, max_sent_length=self.max_sent_length)
+        result = engine.translate(text, n_best=n_best, beam_size=self.beam_size, max_sent_length=self.max_sent_length, target_lang=target_lang)
 
         # (3) Reset model if needed
         if reset_model:

@@ -79,7 +79,6 @@ class TranslationMemory:
 
 
 class NMTPreprocessor:
-    MLTSFFX = 'mltsffx_'
     def __init__(self, source_lang, target_lang, bpe_symbols, max_vocab_size):
         self._source_lang = source_lang
         self._target_lang = target_lang
@@ -97,7 +96,8 @@ class NMTPreprocessor:
               if src!=trg:
                  self._lang_pairs.append((src,trg))
         self._lang_pairs=list(set(self._lang_pairs))
-        
+        if len(self._lang_pairs) > 1:
+	    self._multilingual = True
   
     def process(self, corpora, valid_corpora, output_path, checkpoint=None):
         bpe_output_path = os.path.join(output_path, 'vocab.bpe')
@@ -134,9 +134,10 @@ class NMTPreprocessor:
 
                 for word in bpe_encoder.get_source_terms():
                     src_vocab.add(word)
-	        if self._multilingual == True:
+
+		if self._multilingual == True:
 		    for pair in self._lang_pairs:
- 		        src_vocab.add(MTLSFFX+pair[1])  # TODO CHECK: what happens if the same word is added twice?
+ 		        src_vocab.add(NMTEngine.MLTSFFX+pair[1])  # TODO CHECK: what happens if the same word is added twice?
 
                 for word in bpe_encoder.get_target_terms():
                     trg_vocab.add(word)
@@ -169,7 +170,7 @@ class NMTPreprocessor:
 
                     if len(src_words) > 0 and len(trg_words) > 0:
                         if self._multilingual == True:
-                            src_words.append(MTLSFFX+pair[1])
+                            src_words.append(NMTEngine.MLTSFFX+pair[1])
   
                         source = src_vocab.convertToIdxList(src_words,
                                                             onmt.Constants.UNK_WORD)
@@ -279,8 +280,9 @@ class NMTDecoder:
 
             with open(os.path.join(model_folder, 'model.conf'), 'w') as model_map:
                 filename = os.path.basename(self.model)
-                model_map.write('model.%s__%s = %s\n' % (self._source_lang, self._target_lang, filename))
-
+                for pair in self._lang_pairs:
+		    if pair[0]!=pair[1]:
+			model_map.write('model.%s__%s = %s\n' % (pair[0], pair[1], filename))
 
 class NeuralEngine(Engine):
     def __init__(self, name, source_lang, target_lang, bpe_symbols, max_vocab_size=None, gpus=None):
