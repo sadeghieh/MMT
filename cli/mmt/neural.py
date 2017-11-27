@@ -48,12 +48,12 @@ class TranslationMemory:
         self._source_lang = source_lang
         self._target_lang = target_lang
 
-	self._lang_pairs = []
-	for src in self._source_lang.split(","):
-	   for trg in self._target_lang.split(","):
-	      if src!=trg:
-		 self._lang_pairs.append((src,trg))
-	self._lang_pairs=list(set(self._lang_pairs))
+        self._lang_pairs = []
+        for src in self._source_lang.split(","):
+            for trg in self._target_lang.split(","):
+                if src!=trg:
+                    self._lang_pairs.append((src,trg))
+        self._lang_pairs=list(set(self._lang_pairs))
 
         self._java_mainclass = 'eu.modernmt.cli.TranslationMemoryMain'
 
@@ -69,7 +69,7 @@ class TranslationMemory:
         shutil.rmtree(self._model, ignore_errors=True)
         fileutils.makedirs(self._model, exist_ok=True)
 
-	for pair in self._lang_pairs:
+        for pair in self._lang_pairs:
             args = ['-s', pair[0], '-t', pair[1], '-m', self._model, '-c']
             for source_path in source_paths:
                 args.append(source_path)
@@ -97,7 +97,7 @@ class NMTPreprocessor:
                  self._lang_pairs.append((src,trg))
         self._lang_pairs=list(set(self._lang_pairs))
         if len(self._lang_pairs) > 1:
-	    self._multilingual = True
+            self._multilingual = True
   
     def process(self, corpora, valid_corpora, output_path, checkpoint=None):
         bpe_output_path = os.path.join(output_path, 'vocab.bpe')
@@ -120,9 +120,10 @@ class NMTPreprocessor:
             with _log_timed_action(self._logger, 'Creating BPE model'):
                 vb_builder = SubwordTextProcessor.Builder(symbols=self._bpe_symbols,
                                                           max_vocabulary_size=self._max_vocab_size)
-	        tmp=[]
-		for pair in self._lang_pairs:
-		    tmp=tmp+[c.reader([pair[0], pair[1]]) for c in corpora]
+                tmp=[]
+                for pair in self._lang_pairs:
+                    tmp=tmp+[c.reader([pair[0], pair[1]]) for c in corpora]
+
                 bpe_encoder = vb_builder.build(tmp)
                 bpe_encoder.save_to_file(bpe_output_path)
 
@@ -135,9 +136,9 @@ class NMTPreprocessor:
                 for word in bpe_encoder.get_source_terms():
                     src_vocab.add(word)
 
-		if self._multilingual == True:
-		    for pair in self._lang_pairs:
- 		        src_vocab.add(NMTEngine.MLTSFFX+pair[1])  # TODO CHECK: what happens if the same word is added twice?
+                if self._multilingual == True:
+                    for pair in self._lang_pairs:
+                        src_vocab.add(NMTEngine.MLTSFFX+pair[1])  # TODO CHECK: what happens if the same word is added twice?
 
                 for word in bpe_encoder.get_target_terms():
                     trg_vocab.add(word)
@@ -161,32 +162,32 @@ class NMTPreprocessor:
         builder = MMapDataset.Builder(output_path)
 
         for corpus in corpora:
-	    for pair in self._lang_pairs:
-              if pair[0] in corpus.langs and pair[1] in corpus.langs:
-               with corpus.reader([pair[0], pair[1]]) as reader:
-                for source, target in reader:
-                    src_words = bpe_encoder.encode_line(source, is_source=True)
-                    trg_words = bpe_encoder.encode_line(target, is_source=False)
+            for pair in self._lang_pairs:
+                if pair[0] in corpus.langs and pair[1] in corpus.langs:
+                    with corpus.reader([pair[0], pair[1]]) as reader:
+                        for source, target in reader:
+                            src_words = bpe_encoder.encode_line(source, is_source=True)
+                            trg_words = bpe_encoder.encode_line(target, is_source=False)
 
-                    if len(src_words) > 0 and len(trg_words) > 0:
-                        if self._multilingual == True:
-                            src_words.append(NMTEngine.MLTSFFX+pair[1])
+                            if len(src_words) > 0 and len(trg_words) > 0:
+                                if self._multilingual == True:
+                                    src_words.append(NMTEngine.MLTSFFX+pair[1])
   
-                        source = src_vocab.convertToIdxList(src_words,
+                                source = src_vocab.convertToIdxList(src_words,
                                                             onmt.Constants.UNK_WORD)
-                        target = trg_vocab.convertToIdxList(trg_words,
+                                target = trg_vocab.convertToIdxList(trg_words,
                                                             onmt.Constants.UNK_WORD,
                                                             onmt.Constants.BOS_WORD,
                                                             onmt.Constants.EOS_WORD)
-                        builder.add([source], [target])
-                        added += 1
+                                builder.add([source], [target])
+                                added += 1
 
-                    else:
-                        ignored += 1
+                            else:
+                                ignored += 1
 
-                    count += 1
-                    if count % 100000 == 0:
-                        self._logger.info(' %d sentences prepared' % count)
+                            count += 1
+                            if count % 100000 == 0:
+                                self._logger.info(' %d sentences prepared' % count)
 
         self._logger.info('Prepared %d sentences (%d ignored due to length == 0)' % (added, ignored))
 
