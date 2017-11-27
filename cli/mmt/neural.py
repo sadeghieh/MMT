@@ -281,8 +281,8 @@ class NMTDecoder:
             with open(os.path.join(model_folder, 'model.conf'), 'w') as model_map:
                 filename = os.path.basename(self.model)
                 for pair in self._lang_pairs:
-		    if pair[0]!=pair[1]:
-			model_map.write('model.%s__%s = %s\n' % (pair[0], pair[1], filename))
+                    if pair[0]!=pair[1]:
+                        model_map.write('%s__%s = %s\n' % (pair[0], pair[1], filename))
 
 class NeuralEngine(Engine):
     def __init__(self, name, source_lang, target_lang, bpe_symbols, max_vocab_size=None, gpus=None):
@@ -294,7 +294,7 @@ class NeuralEngine(Engine):
         decoder_path = os.path.join(self.models_path, 'decoder')
 
         # Neural specific models
-        model_name = 'model.%s__%s' % (source_lang, target_lang)
+        model_name = '%s__%s' % (source_lang, target_lang)
 
         memory_path = os.path.join(decoder_path, 'memory')
         decoder_model = os.path.join(decoder_path, model_name)
