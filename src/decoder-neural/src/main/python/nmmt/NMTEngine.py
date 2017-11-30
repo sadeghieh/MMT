@@ -36,7 +36,11 @@ class ModelFileNotFoundException(BaseException):
 
 
 class NMTEngine(object):
-    MLTSFFX = 'mltsffx_'	
+    MLTSFFX = 'mltsffx_'
+    COLD = 0
+    WARM = 1
+    HOT = 2
+
     class Metadata:
         __custom_values = {'True': True, 'False': False, 'None': None}
 
@@ -93,40 +97,27 @@ class NMTEngine(object):
         if metadata is None:
             metadata = NMTEngine.Metadata()
 
-        encoder = Models.Encoder(metadata, src_dict)
-        decoder = Models.Decoder(metadata, trg_dict)
-        generator = nn.Sequential(nn.Linear(metadata.rnn_size, trg_dict.size()), nn.LogSoftmax())
+        def _new_instance_initializer(model, generator):
+            for p in model.parameters():
+                p.data.uniform_(-init_value, init_value)
+            for p in generator.parameters():
+                p.data.uniform_(-init_value, init_value)
 
-        model = Models.NMTModel(encoder, decoder)
-
-        if torch_is_using_cuda():
-            model.cuda()
-            generator.cuda()
-
-            if torch_is_multi_gpu():
-                model = nn.DataParallel(model, device_ids=torch_get_gpus(), dim=1)
-                generator = nn.DataParallel(generator, device_ids=torch_get_gpus(), dim=0)
-        else:
-            model.cpu()
-            generator.cpu()
-
-        model.generator = generator
-
-        for p in model.parameters():
-            p.data.uniform_(-init_value, init_value)
-
-        return NMTEngine(src_dict, trg_dict, model, processor, metadata=metadata)
+        return NMTEngine(src_dict, trg_dict, _new_instance_initializer, processor, metadata=metadata)
 
     @staticmethod
     def load_from_checkpoint(checkpoint_path):
         metadata_file = checkpoint_path + '.meta'
         processor_file = checkpoint_path + '.bpe'
         data_file = checkpoint_path + '.dat'
+        dict_file = checkpoint_path + '.vcb'
 
         if not os.path.isfile(processor_file):
             raise ModelFileNotFoundException(processor_file)
         if not os.path.isfile(data_file):
             raise ModelFileNotFoundException(data_file)
+        if not os.path.isfile(dict_file):
+            raise ModelFileNotFoundException(dict_file)
 
         # Metadata
         metadata = NMTEngine.Metadata()
@@ -137,53 +128,90 @@ class NMTEngine(object):
         # Processor
         processor = SubwordTextProcessor.load_from_file(processor_file)
 
-        # Data
-        checkpoint = torch.load(data_file, map_location=lambda storage, loc: storage)
+        dictionary = torch.load(dict_file, map_location=lambda storage, loc: storage)
+        src_dict = dictionary['src']
+        trg_dict = dictionary['tgt']
 
-        src_dict = checkpoint['dicts']['src']
-        trg_dict = checkpoint['dicts']['tgt']
+        def _checkpoint_initializer(model, generator):
+            checkpoint = torch.load(data_file, map_location=lambda storage, loc: storage)
 
-        encoder = Models.Encoder(metadata, src_dict)
-        decoder = Models.Decoder(metadata, trg_dict)
+            model.load_state_dict(checkpoint['model'])
+            generator.load_state_dict(checkpoint['generator'])
 
+        return NMTEngine(src_dict, trg_dict, _checkpoint_initializer, processor, metadata=metadata)
+
+    def __init__(self, src_dict, trg_dict, initializer, processor, metadata=None):
+        self._logger = logging.getLogger('nmmt.NMTEngine')
+        self._log_level = logging.INFO
+        self._model_loaded = False
+        self._running_state = self.COLD
+
+        self.src_dict = src_dict
+        self.trg_dict = trg_dict
+        self.model = None
+        self._model_init_state = None
+        self.processor = processor
+        self.metadata = metadata if metadata is not None else NMTEngine.Metadata()
+
+        self._multilingual = None # flag according to type of engine: standard/multilingual
+        self._translator = None  # lazy load
+        self._tuner = None  # lazy load
+
+        self._initializer = initializer
+
+    def __load(self):
+        encoder = Models.Encoder(self.metadata, self.src_dict)
+        decoder = Models.Decoder(self.metadata, self.trg_dict)
         model = Models.NMTModel(encoder, decoder)
-        model.load_state_dict(checkpoint['model'])
 
-        generator = nn.Sequential(nn.Linear(metadata.rnn_size, trg_dict.size()), nn.LogSoftmax())
-        generator.load_state_dict(checkpoint['generator'])
+        generator = nn.Sequential(nn.Linear(self.metadata.rnn_size, self.trg_dict.size()), nn.LogSoftmax())
 
-        if torch_is_using_cuda():
-            model.cuda()
-            generator.cuda()
-        else:
-            model.cpu()
-            generator.cpu()
+        model.cpu()
+        generator.cpu()
+
+        self._initializer(model, generator)
 
         model.generator = generator
         model.eval()
 
-        return NMTEngine(src_dict, trg_dict, model, processor, metadata=metadata)
-
-    def __init__(self, src_dict, trg_dict, model, processor, metadata=None):
-        self._logger = logging.getLogger('nmmt.NMTEngine')
-        self._log_level = logging.INFO
-        self._model_loaded = False
-
-        self.src_dict = src_dict
-        self.trg_dict = trg_dict
         self.model = model
-        self.processor = processor
-        self.metadata = metadata if metadata is not None else NMTEngine.Metadata()
-
-	self._multilingual = None # flag according to type of engine: standard/multilingual
-        self._translator = None  # lazy load
-        self._tuner = None  # lazy load
 
         # Compute initial state
         model_state_dict, generator_state_dict = self._get_state_dicts()
 
         self._model_init_state = {k: v for k, v in sorted(model_state_dict.items()) if 'generator' not in k}
         self._model_init_state.update({"generator." + k: v for k, v in sorted(generator_state_dict.items())})
+
+        self._model_loaded = False
+
+    def __unload(self):
+        del self.model
+        del self._model_init_state
+        del self._translator
+        self.model = None
+        self._model_init_state = None
+        self._translator = None
+
+        self._model_loaded = False
+
+    def __gpu(self):
+        model = self.model
+        generator = self.model.generator
+
+        if torch_is_using_cuda():
+            model.cuda()
+            generator.cuda()
+
+            if torch_is_multi_gpu():
+                model = nn.DataParallel(model, device_ids=torch_get_gpus(), dim=1)
+                generator = nn.DataParallel(generator, device_ids=torch_get_gpus(), dim=0)
+
+            self.model = model
+            self.model.generator = generator
+
+    def __cpu(self):
+        self.model.cpu()
+        self.model.generator.cpu()
 
     def reset_model(self):
         with log_timed_action(self._logger, 'Restoring model initial state', log_start=False):
@@ -288,18 +316,21 @@ class NMTEngine(object):
         self._translator.opt.n_best = n_best
 
         src_bpe_tokens = self.processor.encode_line(text, is_source=True)
-	if self._multilingual == True:
-	    src_bpe_tokens.append(NMTEngine.MLTSFFX+target_lang)
-	    sffx_position=len(src_bpe_tokens)-1
+        if self._multilingual == True:
+            src_bpe_tokens.append(NMTEngine.MLTSFFX+target_lang)
+            sffx_position=len(src_bpe_tokens)-1
 
-	pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
+        pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
+        pred_batch, _, _, align_batch = self._translator.translate([src_bpe_tokens], None)
 
         translations = []
         for trg_bpe_tokens, bpe_alignment in zip(pred_batch[0], align_batch[0]):
-	    src_indexes = self.processor.get_words_indexes(src_bpe_tokens)
+            src_indexes = self.processor.get_words_indexes(src_bpe_tokens)
             trg_indexes = self.processor.get_words_indexes(trg_bpe_tokens)
-	    if self._multilingual == True:
-	        bpe_alignment = [p for p in bpe_alignment if p[0] != sffx_position]
+
+            if self._multilingual == True:
+                bpe_alignment = [p for p in bpe_alignment if p[0] != sffx_position]
+
             translation = Translation(text=self.processor.decode_tokens(trg_bpe_tokens),
                                       alignment=self._make_alignment(src_indexes, trg_indexes, bpe_alignment))
 
@@ -327,27 +358,52 @@ class NMTEngine(object):
             checkpoint = {
                 'model': model_state_dict,
                 'generator': generator_state_dict,
-                'dicts': {'src': self.src_dict, 'tgt': self.trg_dict},
             }
-
             torch.save(checkpoint, path + '.dat')
 
+            dictionary = {
+                'src': self.src_dict, 'tgt': self.trg_dict,
+            }
+            torch.save(dictionary, path + '.vcb')
+
     def _get_state_dicts(self):
-        is_multi_gpu = torch_is_multi_gpu()
-
-        model = self.model.module if is_multi_gpu else self.model
-        generator = self.model.generator.module if is_multi_gpu else self.model.generator
-
-        model_state_dict = {k: v for k, v in model.state_dict().items() if 'generator' not in k}
-        generator_state_dict = generator.state_dict()
+        model_state_dict = {k: v for k, v in self.model.state_dict().items() if 'generator' not in k}
+        generator_state_dict = self.model.generator.state_dict()
 
         return copy.deepcopy(model_state_dict), copy.deepcopy(generator_state_dict)
 
     @property
     def multilingual(self):
-	return self._multilingual
+        return self._multilingual
 
     @multilingual.setter
     def multilingual(self,value):
-	self._multilingual=value
+        self._multilingual=value
 
+    @property
+    def running_state(self):
+        return self._running_state
+
+    @running_state.setter
+    def running_state(self, value):
+        if not (value == self.COLD or value == self.WARM or value == self.HOT):
+            raise ValueError('Invalid Value %d' % value)
+
+        if self._running_state == self.COLD:
+            if value == self.WARM:
+                self.__load()
+            elif value == self.HOT:
+                self.__load()
+                self.__gpu()
+        elif self._running_state == self.WARM:
+            if value == self.COLD:
+                self.__unload()
+            elif value == self.HOT:
+                self.__gpu()
+        elif self._running_state == self.HOT:
+            if value == self.COLD:
+                self.__unload()
+            elif value == self.WARM:
+                self.__cpu()
+
+        self._running_state = value
