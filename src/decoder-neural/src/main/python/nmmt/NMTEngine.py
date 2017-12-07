@@ -213,6 +213,9 @@ class NMTEngine(object):
         self.model.cpu()
         self.model.generator.cpu()
 
+    def _is_data_parallel(self):
+        return isinstance(self.model, nn.DataParallel) or isinstance(self.model.generator, nn.DataParallel)
+
     def reset_model(self):
         with log_timed_action(self._logger, 'Restoring model initial state', log_start=False):
             self.model.load_state_dict(self._model_init_state)
@@ -367,8 +370,15 @@ class NMTEngine(object):
             torch.save(dictionary, path + '.vcb')
 
     def _get_state_dicts(self):
-        model_state_dict = {k: v for k, v in self.model.state_dict().items() if 'generator' not in k}
-        generator_state_dict = self.model.generator.state_dict()
+        if self._is_data_parallel():
+            model = self.model.module
+            generator = self.model.generator.module
+        else:
+            model = self.model
+            generator = self.model.generator
+
+        model_state_dict = {k: v for k, v in model.state_dict().items() if 'generator' not in k}
+        generator_state_dict = generator.state_dict()
 
         return copy.deepcopy(model_state_dict), copy.deepcopy(generator_state_dict)
 

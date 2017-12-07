@@ -48,7 +48,7 @@ public class TrainingFacade {
         for (MultilingualCorpus corpus : corpora)
             copyProcess.add(CorporaCleaning.wrap(new MultilingualCorpusMask(languages, corpus), options));
 
-        FileUtils.deleteDirectory(outputDirectory);
+//        FileUtils.deleteDirectory(outputDirectory);
         FileUtils.forceMkdir(outputDirectory);
 
         copyProcess.run();
@@ -69,7 +69,7 @@ public class TrainingFacade {
 
         PreprocessingPipeline pipeline = new PreprocessingPipeline(languages, mainPartition, writer);
 
-        FileUtils.deleteDirectory(destFolder);
+//        FileUtils.deleteDirectory(destFolder);
 
         if (options.developmentPartition != null) {
             FileUtils.deleteDirectory(options.developmentPartition);
@@ -102,7 +102,7 @@ public class TrainingFacade {
             }
         }
 
-        FileUtils.deleteDirectory(outputDirectory);
+//        FileUtils.deleteDirectory(outputDirectory);
         FileUtils.forceMkdir(outputDirectory);
 
         BatchCopyProcess copyProcess = new BatchCopyProcess(corpus -> Corpora.rename(corpus, outputDirectory));

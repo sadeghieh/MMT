@@ -203,6 +203,11 @@ class FileParallelCorpus(BilingualCorpus):
         class __r:
             def __init__(self, filenames):
                 self._filenames = filenames
+                # TODO: move this policy outside this object, and use subdirectories for different languge pairs
+                for f in filenames:
+                    if f is None:
+                        self._filenames = []
+                        break
                 self._files = None
 
             def __enter__(self):

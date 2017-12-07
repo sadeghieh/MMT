@@ -441,7 +441,7 @@ class SubwordTextProcessor:
             """
             It builds a new processor from a collection of data sources.
             A data source object must support __enter__ and __exit__ method to open and close the data stream.
-            The data source object myst also be iterable returning a pair of strings: source and target.
+            The data source object must also be iterable returning a pair of strings: source and target.
 
             :param data_sources: a collection of data source objects
             :return: and instance of Dictionary
