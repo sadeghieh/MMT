@@ -59,14 +59,18 @@ class TranslationResponse:
             json_root['source'] = self.source
 
         if self.suggestions is not None:
+            json_root['suggestions_len'] = len(self.suggestions)
             json_array = []
 
             for suggestion in self.suggestions:
 
                 json_array.append({
-                    'suggestion': suggestion,
+                    'source':suggestion.source,
+                    'target':suggestion.target,
+                    'score':suggestion.score
                 })
 
+            json_root['suggestions_len'] = len(self.suggestions)
             json_root['suggestions'] = json_array
 
         if self.translations is not None:
@@ -108,6 +112,8 @@ class MainController:
                     break
 
                 response = self.process(line)
+
+                self._logger.debug("response:%s" % response.to_json_string())
 
                 self._stdout.write(response.to_json_string())
                 self._stdout.write('\n')
