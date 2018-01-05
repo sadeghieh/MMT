@@ -44,13 +44,30 @@ class TranslationRequest:
 
 
 class TranslationResponse:
-    def __init__(self, translations=None, exception=None):
+    def __init__(self, translations=None, suggestions=None, source=None, exception=None):
         self.translations = translations
+        self.suggestions = suggestions
+        self.source = source
         self.error_type = type(exception).__name__ if exception is not None else None
         self.error_message = str(exception) if exception is not None and str(exception) else None
 
     def to_json_string(self):
         json_root = {}
+
+
+        if self.source is not None:
+            json_root['source'] = self.source
+
+        if self.suggestions is not None:
+            json_array = []
+
+            for suggestion in self.suggestions:
+
+                json_array.append({
+                    'suggestion': suggestion,
+                })
+
+            json_root['suggestions'] = json_array
 
         if self.translations is not None:
             json_array = []
@@ -103,7 +120,7 @@ class MainController:
             request = TranslationRequest.from_json_string(line)
             translations = self._decoder.translate(request.source_lang, request.target_lang, request.source,
                                                    suggestions=request.suggestions, n_best=request.n_best)
-            return TranslationResponse(translations=translations)
+            return TranslationResponse(translations=translations, suggestions=request.suggestions, source=request.source)
         except BaseException as e:
             self._logger.exception('Failed to process request "' + line + '"')
             return TranslationResponse(exception=e)
