@@ -1,6 +1,7 @@
 package eu.modernmt.cluster;
 
 import com.hazelcast.core.Member;
+import eu.modernmt.lang.Language;
 import eu.modernmt.lang.LanguagePair;
 
 import java.util.*;
@@ -18,21 +19,24 @@ public class NodeInfo {
     public final ClusterNode.Status status;
     public final Map<Short, Long> channels;
     public final Set<LanguagePair> languages;
+    public final String address;
 
     static NodeInfo fromMember(Member member) {
         String uuid = member.getUuid();
         ClusterNode.Status status = ClusterNode.Status.valueOf(member.getStringAttribute(STATUS_ATTRIBUTE));
         Map<Short, Long> positions = deserializeChannels(member.getStringAttribute(DATA_CHANNELS_ATTRIBUTE));
         Set<LanguagePair> languages = deserializeLanguages(member.getStringAttribute(TRANSLATION_DIRECTIONS_ATTRIBUTE));
+        String address = member.getAddress().getHost();
 
-        return new NodeInfo(uuid, status, positions, languages);
+        return new NodeInfo(uuid, status, positions, languages, address);
     }
 
-    private NodeInfo(String uuid, ClusterNode.Status status, Map<Short, Long> channels, Set<LanguagePair> languages) {
+    private NodeInfo(String uuid, ClusterNode.Status status, Map<Short, Long> channels, Set<LanguagePair> languages, String address) {
         this.uuid = uuid;
         this.status = status;
         this.channels = channels;
         this.languages = languages;
+        this.address = address;
     }
 
     // Utils
@@ -113,8 +117,8 @@ public class NodeInfo {
             String sourceTag = tags[0].substring(1);
             String targetTag = tags[1].substring(0, tags[1].length() - 1);
 
-            Locale source = Locale.forLanguageTag(sourceTag);
-            Locale target = Locale.forLanguageTag(targetTag);
+            Language source = Language.fromString(sourceTag);
+            Language target = Language.fromString(targetTag);
 
             result.add(new LanguagePair(source, target));
         }
@@ -136,5 +140,4 @@ public class NodeInfo {
 
         return result;
     }
-
 }
