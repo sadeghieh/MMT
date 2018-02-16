@@ -17,7 +17,7 @@ public class F1BleuRescorer implements Rescorer {
 
     private static final int N = 4;
     private static final double EPSILON = 0.1;
-    private static final float MAX_SUGGESTION_EXPANSION = 2.f;
+    private static final float MAX_SUGGESTION_EXPANSION = 2.f; //TODO: find the best value
 
     @Override
     public void rescore(Sentence input, ScoreEntry[] entries) {

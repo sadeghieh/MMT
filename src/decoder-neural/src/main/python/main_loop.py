@@ -13,9 +13,10 @@ from nmmt.models import Translation
 # ======================================================================================================================
 
 class TranslationRequest:
-    def __init__(self, source_lang, target_lang, source, suggestions=None, n_best=None):
+    def __init__(self, source_lang, target_lang, source, suggestions=None, n_best=None, variant=None):
         self.source_lang = source_lang
         self.target_lang = target_lang
+        self.variant = variant
         self.source = source
         self.suggestions = suggestions if suggestions is not None else []
         self.n_best = n_best if n_best > 1 else 1
@@ -28,6 +29,7 @@ class TranslationRequest:
         source_language = obj['source_language']
         target_language = obj['target_language']
         n_best = obj['n_best'] if 'n_best' in obj else None
+        variant = obj['variant'] if 'variant' in obj else None
 
         suggestions = []
 
@@ -41,7 +43,7 @@ class TranslationRequest:
                 suggestions.append(Suggestion(suggestion_source, suggestion_target, suggestion_score))
                 i += 1
 
-        return TranslationRequest(source_language, target_language, source, suggestions, n_best)
+        return TranslationRequest(source_language, target_language, source, suggestions, n_best, variant)
 
 
 class TranslationResponse:
@@ -126,8 +128,12 @@ class MainController:
         try:
             request = TranslationRequest.from_json_string(line)
             translations = self._decoder.translate(request.source_lang, request.target_lang, request.source,
-                                                   suggestions=request.suggestions, n_best=request.n_best)
+                                                   suggestions=request.suggestions, n_best=request.n_best,
+                                                   variant=request.variant)
+
             return TranslationResponse(translations=translations, suggestions=request.suggestions, source=request.source)
+            # return TranslationResponse(translations=translations)
+
         except BaseException as e:
             self._logger.exception('Failed to process request "' + line + '"')
             return TranslationResponse(exception=e)

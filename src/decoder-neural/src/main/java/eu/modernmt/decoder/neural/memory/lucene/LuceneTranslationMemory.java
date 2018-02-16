@@ -7,11 +7,13 @@ import eu.modernmt.decoder.neural.memory.ScoreEntry;
 import eu.modernmt.decoder.neural.memory.TranslationMemory;
 import eu.modernmt.decoder.neural.memory.lucene.rescoring.F1BleuRescorer;
 import eu.modernmt.decoder.neural.memory.lucene.rescoring.Rescorer;
+import eu.modernmt.lang.Language;
 import eu.modernmt.lang.LanguageIndex;
 import eu.modernmt.lang.LanguagePair;
 import eu.modernmt.model.ContextVector;
 import eu.modernmt.model.Memory;
 import eu.modernmt.model.Sentence;
+import eu.modernmt.model.Word;
 import eu.modernmt.model.corpus.MultilingualCorpus;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -32,6 +34,8 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Created by davide on 23/05/17.
@@ -322,6 +326,31 @@ public class LuceneTranslationMemory implements TranslationMemory {
         IOUtils.closeQuietly(this._indexReader);
         IOUtils.closeQuietly(this.indexWriter);
         IOUtils.closeQuietly(this.indexDirectory);
+    }
+
+    public static void main(String[] _args) throws Throwable {
+        LanguagePair lp = new LanguagePair(Language.fromString(_args[0]), Language.fromString(_args[1]));
+        LanguageIndex language = new LanguageIndex(lp);
+        String dir = _args[2];
+
+        File indexPath = new File(dir);
+        LuceneTranslationMemory memory = new LuceneTranslationMemory(language, indexPath, 10);
+
+        List<Word> words = new ArrayList<>();
+        String srcText = "Differences in String";
+        String trgText = "Differenze in String";
+        for (String s : srcText.split(" ")) { words.add(new Word(s)); }
+
+
+        /*build the Sentence based on the words and tags lists */
+        Sentence source = new Sentence(words.toArray(new Word[words.size()]));
+        ScoreEntry[] suggestions = memory.search(lp,source,10);
+        System.err.println("SOURCE:" + srcText);
+        System.err.println("TARGET:" + trgText);
+        int i = 0;
+        for (ScoreEntry suggestion : suggestions) {
+            System.err.println("SUGG[" + i++ + "]:" + suggestion.toString());
+        }
     }
 
 }
